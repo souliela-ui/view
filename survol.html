@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1C2B33">
+<title>Survol — la France vue du ciel, d'hier à aujourd'hui</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1C2B33; --panel:rgba(28,43,51,.93); --line:rgba(238,241,236,.16);
+  --text:#EEF1EC; --muted:#9DB0B8; --amber:#F2B134; --cyan:#6FC3D9;
+  --top:env(safe-area-inset-top,0px); --bot:env(safe-area-inset-bottom,0px);
+  --f:'Barlow',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --fc:'Barlow Condensed','Arial Narrow','Helvetica Neue',sans-serif;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+#blocked{position:fixed;z-index:1150;left:12px;right:12px;top:calc(var(--top) + 68px);margin:0 auto;max-width:440px;background:var(--amber);color:var(--ink);padding:12px 14px;border-radius:8px;font-size:14.5px;line-height:1.4;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+#blocked b{display:block;font-size:15.5px;margin-bottom:3px}
+.round{position:relative}
+.badge{position:absolute;top:-5px;right:-5px;min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:var(--amber);color:var(--ink);font-size:12px;font-weight:600;display:grid;place-items:center}
+.group{font-family:var(--fc);font-weight:700;font-size:19px;margin:14px 0 2px;color:var(--muted)}
+.tog{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:11px 0}
+.tog .sw{flex:0 0 auto;width:20px;height:20px;border-radius:5px;border:2px solid var(--line)}
+.tog[aria-pressed=true] .sw{background:var(--swatch);border-color:var(--swatch)}
+.tog b{display:block;font-weight:500}
+.tog small{color:var(--muted);font-size:12.5px}
+.opa{display:flex;flex-direction:column;gap:4px;margin-top:14px;font-size:13px;color:var(--muted)}
+.opa input{accent-color:var(--amber);width:100%}
+html,body{height:100%;margin:0;background:var(--ink);color:var(--text);font-family:var(--f);-webkit-tap-highlight-color:transparent;overflow:hidden}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+#map{position:fixed;inset:0;background:#24343d}
+
+/* Recherche */
+#search{position:fixed;z-index:1000;top:calc(var(--top) + 12px);left:12px;right:68px;max-width:520px}
+#q{width:100%;height:46px;border-radius:8px;border:1px solid var(--line);background:var(--panel);padding:0 14px 0 40px;font-size:16px;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+#q::placeholder{color:var(--muted)}
+#search svg{position:absolute;left:13px;top:14px;width:18px;height:18px;stroke:var(--muted)}
+#res{margin-top:6px;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+#res button{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:11px 14px}
+#res button:last-child{border-bottom:0}
+#res b{display:block;font-weight:500}
+#res small{color:var(--muted);font-size:12px}
+
+/* Rail d'outils */
+#rail{position:fixed;z-index:1000;top:calc(var(--top) + 12px);right:12px;display:flex;flex-direction:column;gap:8px}
+.round{width:46px;height:46px;border-radius:8px;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.round svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.round.on{color:var(--ink);background:var(--amber);border-color:var(--amber)}
+.round.busy svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Panneau du bas */
+#sheet{position:fixed;z-index:1000;left:0;right:0;bottom:0;margin:0 auto;max-width:680px;background:var(--panel);border-top:1px solid var(--line);border-radius:14px 14px 0 0;padding:12px 12px calc(var(--bot) + 8px);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+@media (min-width:700px){#sheet{bottom:12px;border:1px solid var(--line);border-radius:14px;padding-bottom:8px}}
+.row{display:flex;gap:10px;align-items:center}
+.seg{flex:1;display:flex;background:rgba(0,0,0,.22);border-radius:8px;padding:3px}
+.seg button{flex:1;border:0;background:none;padding:8px 4px;border-radius:6px;font-weight:500;font-size:14px;color:var(--muted)}
+.seg button.on{background:var(--text);color:var(--ink)}
+
+/* Bande de film : l'élément signature */
+.strip{display:flex;gap:6px;overflow-x:auto;margin:10px -12px 0;padding:13px 12px;scroll-snap-type:x proximity;scrollbar-width:none;
+  background:
+    repeating-linear-gradient(90deg,transparent 0 9px,rgba(238,241,236,.2) 9px 15px) top left/100% 5px no-repeat local,
+    repeating-linear-gradient(90deg,transparent 0 9px,rgba(238,241,236,.2) 9px 15px) bottom left/100% 5px no-repeat local,
+    rgba(0,0,0,.25)}
+.strip::-webkit-scrollbar{display:none}
+.frame{flex:0 0 auto;min-width:92px;padding:9px 11px 8px;border:1.5px solid var(--line);border-radius:3px;background:rgba(255,255,255,.04);text-align:left;scroll-snap-align:center;transition:border-color .2s,background .2s}
+.frame .y{display:block;font-family:var(--fc);font-weight:700;font-size:25px;line-height:1;letter-spacing:.01em}
+.frame .t{display:block;font-size:11.5px;color:var(--muted);margin-top:5px;white-space:nowrap}
+.frame.on{border-color:var(--amber);background:rgba(242,177,52,.15)}
+.frame.on .y{color:var(--amber)}
+.frame.off{opacity:.32}
+
+#cmp{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+#cmp label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}
+#cmp label span{display:flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.dot.a{background:var(--amber)} .dot.b{background:var(--cyan)}
+#cmp select{appearance:none;-webkit-appearance:none;height:42px;border-radius:7px;border:1px solid var(--line);background:rgba(0,0,0,.25);padding:0 12px;font-family:var(--fc);font-weight:700;font-size:20px}
+#fadeRow{grid-column:1/-1}
+#fade{width:100%;accent-color:var(--amber);height:28px}
+.credit{margin:8px 2px 0;font-size:11px;color:var(--muted)}
+
+/* Séparateur avant/après */
+#divider{position:fixed;z-index:900;top:0;bottom:0;width:44px;margin-left:-22px;touch-action:none;cursor:ew-resize}
+#divider::before{content:"";position:absolute;left:21px;top:0;bottom:0;width:2px;background:var(--text);box-shadow:0 0 8px rgba(0,0,0,.5)}
+#knob{position:absolute;left:2px;top:42%;width:40px;height:40px;border-radius:50%;background:var(--text);color:var(--ink);display:grid;place-items:center;box-shadow:0 2px 10px rgba(0,0,0,.45)}
+#knob svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.chip{position:absolute;top:calc(var(--top) + 70px);font-family:var(--fc);font-weight:700;font-size:18px;padding:3px 9px;border-radius:4px;white-space:nowrap;color:var(--ink)}
+#chipA{right:30px;background:var(--amber)} #chipB{left:30px;background:var(--cyan)}
+
+/* Année en grand */
+#flash{position:fixed;z-index:800;left:0;right:0;top:36%;text-align:center;font-family:var(--fc);font-weight:700;font-size:clamp(60px,18vw,150px);line-height:1;color:#fff;text-shadow:0 3px 30px rgba(0,0,0,.6);opacity:0;pointer-events:none}
+#flash.show{animation:flash 1.6s ease-out}
+@keyframes flash{0%{opacity:0;transform:translateY(10px)}14%{opacity:.95;transform:none}68%{opacity:.95}100%{opacity:0}}
+
+#toast{position:fixed;z-index:1100;left:12px;right:12px;top:calc(var(--top) + 68px);margin:0 auto;max-width:440px;background:var(--text);color:var(--ink);padding:11px 14px;border-radius:8px;font-size:14.5px;font-weight:500;box-shadow:0 6px 24px rgba(0,0,0,.35);opacity:0;transform:translateY(-6px);transition:.25s;pointer-events:none}
+#toast.show{opacity:1;transform:none}
+
+/* Favoris */
+.modal{position:fixed;inset:0;z-index:1200;background:rgba(10,18,22,.55);display:flex;align-items:flex-end;justify-content:center}
+.modal[hidden]{display:none}
+.card{width:100%;max-width:520px;max-height:72vh;overflow:auto;background:var(--ink);border:1px solid var(--line);border-radius:14px 14px 0 0;padding:14px 14px calc(var(--bot) + 14px)}
+.card header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.card h2{font-family:var(--fc);font-weight:700;font-size:28px;margin:0}
+.fav{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding:10px 0}
+.fav .go{flex:1;text-align:left;background:none;border:0;padding:0}
+.fav .go b{display:block;font-weight:500}
+.fav .go small{color:var(--muted);font-size:12.5px}
+.fav .del{background:none;border:1px solid var(--line);border-radius:6px;padding:6px 10px;color:var(--muted);font-size:13px}
+.empty{color:var(--muted);font-size:14.5px;line-height:1.5;margin:6px 0}
+
+/* Bulles Leaflet */
+.pop .leaflet-popup-content-wrapper,.pop .leaflet-popup-tip{background:var(--ink);color:var(--text);border:1px solid var(--line)}
+.pop .leaflet-popup-content-wrapper{border-radius:8px}
+.pop .leaflet-popup-content{margin:12px 14px;font-family:var(--f)}
+.popin b{display:block;font-weight:600;font-size:14.5px;margin-bottom:2px}
+.popin small{color:var(--muted)}
+.popin .acts{display:flex;gap:6px;margin-top:10px}
+.popin button{border:1px solid var(--line);background:rgba(255,255,255,.06);border-radius:6px;padding:7px 9px;font-size:13px}
+.popin button[disabled]{opacity:.4}
+.pop a.leaflet-popup-close-button{color:var(--muted)}
+
+@media (prefers-reduced-motion:reduce){
+  #flash.show{animation:none} .round.busy svg{animation:none}
+  #toast,.frame{transition:none}
+}
+</style>
+</head>
+<body>
+<div id="map" aria-label="Carte des photographies aériennes"></div>
+
+<div id="search" role="search">
+  <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+  <input id="q" type="search" placeholder="Une ville, une adresse, un lieu-dit" autocomplete="off" enterkeyhint="search" aria-label="Rechercher un lieu">
+  <div id="res" hidden></div>
+</div>
+
+<nav id="rail" aria-label="Outils">
+  <button class="round" id="loc" aria-label="Me localiser" title="Me localiser"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
+  <button class="round" id="rand" aria-label="Survoler un lieu qui a changé" title="Un lieu qui a changé"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r=".6" fill="currentColor"/><circle cx="15" cy="15" r=".6" fill="currentColor"/><circle cx="15" cy="9" r=".6" fill="currentColor"/><circle cx="9" cy="15" r=".6" fill="currentColor"/></svg></button>
+  <button class="round" id="favBtn" aria-label="Favoris" title="Favoris"><svg viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></button>
+  <button class="round" id="layersBtn" aria-label="Données à afficher" title="Données"><svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg><span class="badge" id="badge" hidden></span></button>
+  <button class="round" id="share" aria-label="Partager cette vue" title="Partager"><svg viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg></button>
+</nav>
+
+<div id="divider" hidden tabindex="0" role="slider" aria-label="Position du rideau avant/après" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
+  <span class="chip" id="chipA"></span><span class="chip" id="chipB"></span>
+  <div id="knob"><svg viewBox="0 0 24 24"><path d="m9 6-5 6 5 6M15 6l5 6-5 6"/></svg></div>
+</div>
+
+<div id="flash" aria-hidden="true"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="blocked" role="alert" hidden><b>Les photos IGN ne peuvent pas se charger ici</b>Cette fenêtre bloque les connexions vers l’extérieur, ou l’appareil est hors ligne. Ouvrez la page depuis une adresse https (hébergée) dans Safari.</div>
+
+<section id="sheet" aria-label="Époques">
+  <div class="row">
+    <div class="seg" role="tablist">
+      <button data-mode="single" class="on" role="tab">Une époque</button>
+      <button data-mode="split" role="tab">Avant / après</button>
+      <button data-mode="fade" role="tab">Fondu</button>
+    </div>
+    <button class="round" id="play" aria-label="Faire défiler les époques" title="Faire défiler les époques">
+      <svg viewBox="0 0 24 24" id="playIco"><path d="M7 4l13 8-13 8z"/></svg>
+    </button>
+  </div>
+  <div id="strip" class="strip"></div>
+  <div id="cmp" hidden>
+    <label><span><i class="dot a"></i><span id="labA">À gauche</span></span><select id="selA"></select></label>
+    <label><span><i class="dot b"></i><span id="labB">À droite</span></span><select id="selB"></select></label>
+    <label id="fadeRow" hidden><span>Glissez pour passer d'une époque à l'autre</span><input id="fade" type="range" min="0" max="100" value="50"></label>
+  </div>
+  <p class="credit">Photographies aériennes © IGN – Géoplateforme, Licence Ouverte Etalab 2.0</p>
+</section>
+
+<div id="layers" class="modal" hidden>
+  <div class="card" role="dialog" aria-label="Données">
+    <header><h2>Données</h2><button class="round" id="layersClose" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header>
+    <div id="layerList"></div>
+    <label class="opa">Transparence des données<input id="opa" type="range" min="20" max="100" value="70"></label>
+    <p class="credit">Sources : IGN – Géoplateforme, Géorisques (ministère de la Transition écologique). Les cartes anciennes sont dans la bande des époques.</p>
+  </div>
+</div>
+
+<div id="favs" class="modal" hidden>
+  <div class="card" role="dialog" aria-label="Favoris">
+    <header><h2>Favoris</h2><button class="round" id="favClose" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header>
+    <div id="favList"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const WMTS='https://data.geopf.fr/wmts';
+const GEO='https://data.geopf.fr/geocodage';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+
+// Couches de secours si le catalogue IGN (GetCapabilities) ne répond pas
+const FALLBACK=[
+  {id:'ORTHOIMAGERY.ORTHOPHOTOS.1950-1965',fmt:'image/png',maxZ:18},
+  {id:'ORTHOIMAGERY.ORTHOPHOTOS1980-1995',fmt:'image/png',maxZ:18},
+  {id:'ORTHOIMAGERY.ORTHOPHOTOS2000-2005',fmt:'image/jpeg',maxZ:18},
+  {id:'ORTHOIMAGERY.ORTHOPHOTOS2006-2010',fmt:'image/jpeg',maxZ:18},
+  {id:'ORTHOIMAGERY.ORTHOPHOTOS2011-2015',fmt:'image/jpeg',maxZ:18},
+  {id:'ORTHOIMAGERY.ORTHOPHOTOS',fmt:'image/jpeg',maxZ:19},
+  {id:'ORTHOIMAGERY.ORTHOPHOTOS.IRC',fmt:'image/jpeg',maxZ:19},
+  {id:'GEOGRAPHICALGRIDSYSTEMS.CASSINI',fmt:'image/png',maxZ:14},
+  {id:'GEOGRAPHICALGRIDSYSTEMS.ETATMAJOR40',fmt:'image/jpeg',maxZ:15}
+];
+const MAPS={'GEOGRAPHICALGRIDSYSTEMS.CASSINI':{label:'Cassini',sort:1750,sub:'carte du XVIIIᵉ siècle'},
+            'GEOGRAPHICALGRIDSYSTEMS.ETATMAJOR40':{label:'1820–1866',sort:1820,sub:'carte d’État-major'}};
+
+// Lieux qui ont beaucoup changé : de quoi démarrer
+const SPOTS=[
+  {n:'Viaduc de Millau',ll:[44.0777,3.0225],z:15,note:'Le viaduc n’existe pas avant 2004.'},
+  {n:'La Défense',ll:[48.8919,2.2385],z:16,note:'Des usines et des pavillons avant les tours.'},
+  {n:'Dune du Pilat',ll:[44.5895,-1.2131],z:15,note:'La dune avance vers la forêt.'},
+  {n:'Mont-Saint-Michel',ll:[48.6361,-1.5115],z:15,note:'La digue et les parkings ont été remplacés par une passerelle.'},
+  {n:'Lyon Confluence',ll:[45.7404,4.8183],z:16,note:'Une ancienne gare de marchandises devenue quartier.'},
+  {n:'Marseille, Euroméditerranée',ll:[43.3086,5.3705],z:16,note:'Les docks de la Joliette transformés.'},
+  {n:'Stade de France',ll:[48.9244,2.3601],z:16,note:'Construit en 1998 sur d’anciens gazomètres.'},
+  {n:'La Grande-Motte',ll:[43.5605,4.0846],z:15,note:'Une station sortie des marais dans les années 1960.'},
+  {n:'Disneyland Paris',ll:[48.8722,2.7758],z:15,note:'Des champs de betteraves jusqu’en 1992.'},
+  {n:'Terminal Eurotunnel, Coquelles',ll:[50.9269,1.8128],z:15,note:'Ouvert en 1994.'},
+  {n:'Aéroport Paris-CDG',ll:[49.0097,2.5479],z:14,note:'Inauguré en 1974 sur des terres agricoles.'}
+];
+
+let epochs=[], ignInfo={};
+let mode='single', cur=-1, idxA=0, idxB=0, ratio=.5, mix=.5, playing=null, ready=false, dragEnd=0, zc=1;
+let backL=null, frontL=null, me=null;
+
+const map=L.map('map',{zoomControl:false,attributionControl:false,minZoom:5,maxZoom:20,zoomSnap:.5}).setView([46.6,2.4],6);
+map.createPane('front').style.zIndex=250;
+map.createPane('over').style.zIndex=320;
+
+const tileUrl=e=>`${WMTS}?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${encodeURIComponent(e.id)}&STYLE=${encodeURIComponent(e.style||'normal')}&TILEMATRIXSET=PM&FORMAT=${encodeURIComponent(e.fmt)}&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}`;
+
+const cache=new Map();
+function layerFor(e,pane,extra={}){
+  const key=e.id+'|'+pane;
+  if(cache.has(key))return cache.get(key);
+  const tl=L.tileLayer(tileUrl(e),{pane,maxZoom:20,maxNativeZoom:e.maxZ||19,bounds:e.bounds||undefined,...extra});
+  tl._ok=0; tl._err=0;
+  tl.on('loading',()=>{tl._ok=0;tl._err=0});
+  tl.on('tileload',()=>tl._ok++);
+  tl.on('tileerror',()=>tl._err++);
+  tl.on('load',()=>{ if(tl._err>0&&tl._ok===0&&map.hasLayer(tl)&&e.label) toast(`Pas d’image ${e.label} ici à ce niveau de zoom. Dézoomez ou choisissez une autre époque.`) });
+  cache.set(key,tl); return tl;
+}
+
+// ---- Catalogue des époques depuis l'IGN ----
+const kids=(el,n)=>el?[...el.children].filter(c=>c.localName===n):[];
+const kid=(el,n)=>kids(el,n)[0];
+const txt=el=>el?el.textContent.trim():'';
+
+function mkEpoch(o){
+  const id=o.id;
+  const rng=id.match(/((?:19|20)\d{2})\s*-\s*((?:19|20)\d{2})/);
+  const yr=id.match(/(?:19|20)\d{2}/);
+  let label,sort,kind='photo',sub;
+  if(MAPS[id]){return {...o,...MAPS[id],kind:'map',bounds:o.bounds?L.latLngBounds(o.bounds):null}}
+  if(id==='ORTHOIMAGERY.ORTHOPHOTOS.IRC'){label='Infrarouge';sort=10000;kind='irc';sub='végétation en rouge'}
+  else if(/IRC/.test(id))return null;
+  else if(rng){label=`${rng[1]}–${rng[2]}`;sort=+rng[1]+.5;sub='campagnes successives'}
+  else if(yr){label=yr[0];sort=+yr[0];sub='prise de vue'}
+  else if(id==='ORTHOIMAGERY.ORTHOPHOTOS'){label='Aujourd’hui';sort=9999;sub='la plus récente'}
+  else return null;
+  return {...o,label,sort,kind,sub,bounds:o.bounds?L.latLngBounds(o.bounds):null};
+}
+
+async function loadCaps(){
+  const r=await fetch(`${WMTS}?SERVICE=WMTS&REQUEST=GetCapabilities&VERSION=1.0.0`);
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const xml=new DOMParser().parseFromString(await r.text(),'application/xml');
+  const out=[];
+  for(const ly of xml.getElementsByTagNameNS('*','Layer')){
+    const id=txt(kid(ly,'Identifier')); if(!id)continue;
+    const isOrtho=id.startsWith('ORTHOIMAGERY.ORTHOPHOTOS')||!!MAPS[id], isOv=OV_IDS.has(id);
+    if(!isOrtho&&!isOv)continue;
+    const link=kids(ly,'TileMatrixSetLink').find(k=>txt(kid(k,'TileMatrixSet'))==='PM'); if(!link)continue;
+    const fmts=kids(ly,'Format').map(txt);
+    const st=kid(ly,'Style'); const style=st?txt(kid(st,'Identifier'))||'normal':'normal';
+    const lim=kid(link,'TileMatrixSetLimits');
+    const zs=kids(lim,'TileMatrixLimits').map(t=>+txt(kid(t,'TileMatrix')).split(':').pop()).filter(n=>!isNaN(n));
+    const maxZ=zs.length?Math.max(...zs):19;
+    const bb=kid(ly,'WGS84BoundingBox'); let bounds=null;
+    if(bb){const lc=txt(kid(bb,'LowerCorner')).split(/\s+/).map(Number),uc=txt(kid(bb,'UpperCorner')).split(/\s+/).map(Number);
+      if(lc.length===2&&uc.length===2)bounds=[[lc[1],lc[0]],[uc[1],uc[0]]];}
+    if(isOv){ignInfo[id]={id,fmt:fmts.includes('image/png')?'image/png':fmts[0],style,maxZ};continue}
+    const fmt=fmts.includes('image/jpeg')?'image/jpeg':(fmts.includes('image/png')?'image/png':fmts[0]);
+    const e=mkEpoch({id,fmt,style,maxZ,bounds}); if(e)out.push(e);
+  }
+  return out;
+}
+
+function finalize(list){
+  const m=new Map();
+  for(const e of list){const p=m.get(e.label); if(!p||e.id.length<p.id.length)m.set(e.label,e)}
+  return [...m.values()].sort((a,b)=>a.sort-b.sort);
+}
+
+const avail=e=>!e.bounds||e.bounds.contains(map.getCenter());
+const photoIdx=()=>epochs.map((e,i)=>i).filter(i=>epochs[i].kind!=='irc'&&avail(epochs[i]));
+const onlyPhotos=()=>photoIdx().filter(i=>epochs[i].kind==='photo');
+
+// ---- Affichage ----
+function swapBack(nb){
+  if(backL===nb){return}
+  const old=backL; backL=nb;
+  if(nb){ nb.addTo(map); nb.setZIndex(++zc); }
+  if(old){
+    if(nb&&nb.isLoading&&nb.isLoading()) nb.once('load',()=>{ if(old!==backL&&old!==frontL)map.removeLayer(old) });
+    else map.removeLayer(old);
+  }
+}
+function apply(){
+  const b=mode==='single'?epochs[cur]:epochs[idxB];
+  const f=mode==='single'?null:epochs[idxA];
+  swapBack(b?layerFor(b,'tilePane'):null);
+  const nf=f?layerFor(f,'front'):null;
+  if(frontL!==nf){ if(frontL)map.removeLayer(frontL); frontL=nf; if(nf)nf.addTo(map); }
+  if(frontL)frontL.setOpacity(mode==='fade'?mix:1);
+  updateClip(); updateDivider(); markStrip(); updateHash();
+}
+
+function updateClip(){
+  const pane=map.getPane('front');
+  if(mode!=='split'){pane.style.clip='';return}
+  const s=map.getSize(), nw=map.containerPointToLayerPoint([0,0]), se=map.containerPointToLayerPoint(s);
+  const x=nw.x+s.x*ratio;
+  pane.style.clip=`rect(${nw.y}px, ${x}px, ${se.y}px, ${nw.x}px)`;
+}
+map.on('move zoomend resize viewreset',updateClip);
+
+function updateDivider(){
+  const d=$('#divider'); d.hidden=mode!=='split';
+  if(mode!=='split')return;
+  d.style.left=(ratio*100)+'%';
+  d.setAttribute('aria-valuenow',Math.round(ratio*100));
+  $('#chipA').textContent=epochs[idxA]?.label||''; $('#chipB').textContent=epochs[idxB]?.label||'';
+}
+
+function renderStrip(){
+  const s=$('#strip'); s.innerHTML='';
+  epochs.forEach((e,i)=>{
+    const b=document.createElement('button');
+    b.className='frame'; b.dataset.i=i;
+    b.innerHTML=`<span class="y">${esc(e.label)}</span><span class="t">${esc(e.sub)}</span>`;
+    b.onclick=()=>{stop();setEpoch(i)};
+    s.append(b);
+  });
+  markStrip(true);
+}
+function markStrip(scroll){
+  document.querySelectorAll('.frame').forEach(b=>{
+    const i=+b.dataset.i; b.classList.toggle('on',i===cur); b.classList.toggle('off',!avail(epochs[i]));
+    b.setAttribute('aria-pressed',i===cur);
+    if(scroll&&i===cur)b.scrollIntoView({inline:'center',block:'nearest'});
+  });
+}
+function fillSelects(){
+  const opts=epochs.map((e,i)=>`<option value="${i}">${esc(e.label)}</option>`).join('');
+  $('#selA').innerHTML=opts; $('#selB').innerHTML=opts;
+}
+function syncModeUI(){
+  document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',b.dataset.mode===mode));
+  $('#strip').hidden=mode!=='single'; $('#cmp').hidden=mode==='single';
+  $('#fadeRow').hidden=mode!=='fade';
+  $('#labA').textContent=mode==='fade'?'Par-dessus':'À gauche';
+  $('#labB').textContent=mode==='fade'?'En dessous':'À droite';
+  $('#selA').value=idxA; $('#selB').value=idxB; $('#fade').value=Math.round(mix*100);
+}
+
+function flash(t){const f=$('#flash'); f.textContent=t; f.classList.remove('show'); void f.offsetWidth; f.classList.add('show')}
+
+function setEpoch(i){ if(i<0||i>=epochs.length)return; cur=i; apply(); markStrip(true); flash(epochs[i].label) }
+
+function setMode(m){
+  if(m!=='single')stop();
+  const prev=mode; mode=m;
+  if(m!=='single'&&prev==='single'){
+    const av=onlyPhotos(); const latest=av[av.length-1], oldest=av[0];
+    idxB=(cur>=0&&epochs[cur].kind!=='irc'&&cur!==oldest)?cur:latest;
+    idxA=oldest!==idxB?oldest:(av.find(i=>i!==idxB)??oldest);
+  }
+  if(m==='single'&&prev!=='single')cur=idxB;
+  syncModeUI(); apply();
+}
+document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
+$('#selA').onchange=e=>{idxA=+e.target.value;apply();flash(epochs[idxA].label)};
+$('#selB').onchange=e=>{idxB=+e.target.value;apply();flash(epochs[idxB].label)};
+$('#fade').oninput=e=>{mix=e.target.value/100; if(frontL)frontL.setOpacity(mix)};
+
+// ---- Voyage dans le temps ----
+function stop(){ if(playing){clearInterval(playing);playing=null} $('#play').classList.remove('on'); $('#playIco').innerHTML='<path d="M7 4l13 8-13 8z"/>' }
+$('#play').onclick=()=>{
+  if(playing){stop();return}
+  if(mode!=='single')setMode('single');
+  const list=photoIdx();
+  if(list.length<2){toast('Une seule époque couvre ce lieu.');return}
+  let k=list.indexOf(cur);
+  const step=()=>{k=(k+1)%list.length; setEpoch(list[k])};
+  if(k<0||k===list.length-1)k=-1;
+  step(); playing=setInterval(step,2600);
+  $('#play').classList.add('on'); $('#playIco').innerHTML='<path d="M8 5v14M16 5v14"/>';
+};
+
+// ---- Rideau avant/après ----
+const dv=$('#divider'); let dragging=false;
+function setRatio(r){ratio=Math.min(.97,Math.max(.03,r));updateClip();updateDivider()}
+dv.addEventListener('pointerdown',e=>{dragging=true;dv.setPointerCapture(e.pointerId);map.dragging.disable();e.preventDefault()});
+dv.addEventListener('pointermove',e=>{if(!dragging)return;const r=map.getContainer().getBoundingClientRect();setRatio((e.clientX-r.left)/r.width)});
+const endDrag=()=>{if(!dragging)return;dragging=false;map.dragging.enable();dragEnd=Date.now()};
+dv.addEventListener('pointerup',endDrag); dv.addEventListener('pointercancel',endDrag);
+dv.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){setRatio(ratio-.05);e.preventDefault()}if(e.key==='ArrowRight'){setRatio(ratio+.05);e.preventDefault()}});
+
+document.addEventListener('keydown',e=>{
+  if(mode!=='single'||e.target.matches('input,select'))return;
+  if(e.key==='ArrowRight'){stop();setEpoch(Math.min(epochs.length-1,cur+1))}
+  if(e.key==='ArrowLeft'){stop();setEpoch(Math.max(0,cur-1))}
+});
+
+// ---- Recherche de lieu ----
+const TYPE={municipality:'Commune',street:'Voie',housenumber:'Adresse',locality:'Lieu-dit'};
+const ZOOM={municipality:14,street:17,housenumber:18,locality:16};
+let st, lastRes=[];
+$('#q').addEventListener('input',e=>{clearTimeout(st);const q=e.target.value.trim(); if(q.length<3){showRes([]);return} st=setTimeout(()=>search(q),280)});
+$('#q').addEventListener('keydown',e=>{if(e.key==='Enter'&&lastRes[0])pick(lastRes[0]); if(e.key==='Escape')showRes([])});
+async function search(q){
+  try{const r=await fetch(`${GEO}/search?q=${encodeURIComponent(q)}&limit=6`); const j=await r.json(); showRes(j.features||[])}
+  catch{showRes([]);toast('La recherche ne répond pas. Vérifiez la connexion et réessayez.')}
+}
+function showRes(fs){
+  lastRes=fs; const box=$('#res'); box.innerHTML='';
+  fs.forEach(f=>{const p=f.properties||{}; const b=document.createElement('button');
+    b.innerHTML=`<b>${esc(p.label)}</b><small>${esc(TYPE[p.type]||'')}${p.context?' – '+esc(p.context):''}</small>`;
+    b.onclick=()=>pick(f); box.append(b)});
+  box.hidden=!fs.length;
+}
+function pick(f){const [lng,lat]=f.geometry.coordinates; const p=f.properties||{};
+  $('#q').value=p.label||''; showRes([]); $('#q').blur(); map.flyTo([lat,lng],ZOOM[p.type]||16,{duration:1.4})}
+
+// ---- Toucher la carte : adresse + favori ----
+function popEl(label,lat,lng,loading){
+  const d=document.createElement('div'); d.className='popin';
+  d.innerHTML=`<b>${esc(label)}</b><small>${lat.toFixed(5)}, ${lng.toFixed(5)}</small><div class="acts"><button data-a="fav" ${loading?'disabled':''}>Ajouter aux favoris</button><button data-a="zoom">Zoomer ici</button></div>`;
+  d.querySelector('[data-a=fav]').onclick=()=>{addFav(label,lat,lng);map.closePopup()};
+  d.querySelector('[data-a=zoom]').onclick=()=>{map.closePopup();map.flyTo([lat,lng],Math.max(map.getZoom()+2,17))};
+  return d;
+}
+map.on('click',async ev=>{
+  if(Date.now()-dragEnd<350)return;
+  $('#res').hidden=true;
+  const {lat,lng}=ev.latlng;
+  const pop=L.popup({className:'pop',maxWidth:280}).setLatLng(ev.latlng).setContent(popEl('Recherche de l’adresse…',lat,lng,true)).openOn(map);
+  try{const r=await fetch(`${GEO}/reverse?lon=${lng}&lat=${lat}&limit=1`); const j=await r.json();
+    pop.setContent(popEl(j.features?.[0]?.properties?.label||'Lieu sans adresse',lat,lng))}
+  catch{pop.setContent(popEl('Adresse indisponible',lat,lng))}
+});
+
+// ---- Favoris (mémorisent aussi l'époque et le mode) ----
+let favs=store.get('survol:favs',[]);
+function viewHash(lat,lng){
+  const c=lat!=null?{lat,lng}:map.getCenter();
+  const p=[Math.round(map.getZoom()*2)/2,c.lat.toFixed(5),c.lng.toFixed(5),mode];
+  if(mode==='single')p.push(epochs[cur]?.id||''); else p.push(epochs[idxA]?.id||'',epochs[idxB]?.id||'');
+  const on=[...activeOv]; if(on.length)p.push('o:'+on.join('+'));
+  return p.map(encodeURIComponent).join('/');
+}
+function addFav(name,lat,lng){
+  const desc=mode==='single'?epochs[cur]?.label:`${epochs[idxA]?.label} / ${epochs[idxB]?.label}`;
+  favs.unshift({name,desc,hash:viewHash(lat,lng)}); store.set('survol:favs',favs); toast('Ajouté aux favoris');
+}
+function renderFavs(){
+  const l=$('#favList');
+  if(!favs.length){l.innerHTML='<p class="empty">Aucun favori pour l’instant. Touchez un endroit sur la carte, puis « Ajouter aux favoris » : l’époque affichée est enregistrée avec le lieu.</p>';return}
+  l.innerHTML='';
+  favs.forEach((f,i)=>{const r=document.createElement('div'); r.className='fav';
+    r.innerHTML=`<button class="go"><b>${esc(f.name)}</b><small>${esc(f.desc||'')}</small></button><button class="del" aria-label="Retirer ${esc(f.name)}">Retirer</button>`;
+    r.querySelector('.go').onclick=()=>{closeFavs();goHash(f.hash)};
+    r.querySelector('.del').onclick=()=>{favs.splice(i,1);store.set('survol:favs',favs);renderFavs()};
+    l.append(r)});
+}
+const closeFavs=()=>{$('#favs').hidden=true};
+$('#favBtn').onclick=()=>{renderFavs();$('#favs').hidden=false};
+$('#favClose').onclick=closeFavs;
+$('#favs').onclick=e=>{if(e.target.id==='favs')closeFavs()};
+
+// ---- Lien partageable ----
+function updateHash(){ if(!ready)return; try{history.replaceState(null,'','#'+viewHash())}catch{} }
+map.on('moveend',()=>{updateHash();markStrip()});
+function readHash(h){
+  const p=(h||'').replace(/^#/,'').split('/').map(decodeURIComponent);
+  if(p.length<5||isNaN(+p[1])||isNaN(+p[2]))return false;
+  const ov=p.find(x=>x.startsWith('o:')); if(ov){setOverlays(ov.slice(2).split('+'))}
+  const [z,lat,lng,m,a,b]=p.filter(x=>!x.startsWith('o:')); const fi=id=>epochs.findIndex(e=>e.id===id);
+  map.setView([+lat,+lng],+z||15);
+  if(m==='single'){const i=fi(a); if(i>=0)cur=i; mode='single'}
+  else if(m==='split'||m==='fade'){const ia=fi(a),ib=fi(b); if(ia>=0&&ib>=0){idxA=ia;idxB=ib;mode=m}}
+  return true;
+}
+function goHash(h){ stop(); if(readHash(h)){syncModeUI();apply();markStrip(true)} }
+$('#share').onclick=async()=>{
+  updateHash(); const url=location.href;
+  try{ if(navigator.share)await navigator.share({title:'Survol',text:'Regarde ce lieu vu du ciel',url});
+       else{await navigator.clipboard.writeText(url);toast('Lien copié : il rouvre cette vue et cette époque.')} }catch{}
+};
+
+// ---- Géolocalisation ----
+$('#loc').onclick=()=>{
+  if(!navigator.geolocation){toast('Cet appareil ne fournit pas de position.');return}
+  const b=$('#loc'); b.classList.add('busy');
+  navigator.geolocation.getCurrentPosition(p=>{
+    b.classList.remove('busy');
+    const ll=[p.coords.latitude,p.coords.longitude];
+    if(me)me.remove();
+    me=L.layerGroup([
+      L.circle(ll,{radius:p.coords.accuracy,color:'#6FC3D9',weight:1,fillOpacity:.12,interactive:false}),
+      L.circleMarker(ll,{radius:7,color:'#fff',weight:2,fillColor:'#6FC3D9',fillOpacity:1,interactive:false})
+    ]).addTo(map);
+    map.flyTo(ll,17,{duration:1.4});
+  },err=>{
+    b.classList.remove('busy');
+    toast(err.code===1?'Position refusée. Autorisez la localisation pour ce site dans les réglages du navigateur.':'Position introuvable. Réessayez dans quelques secondes.');
+  },{enableHighAccuracy:true,timeout:12000,maximumAge:30000});
+};
+
+// ---- Un lieu qui a changé ----
+let lastSpot=-1;
+$('#rand').onclick=()=>{
+  let i; do{i=Math.floor(Math.random()*SPOTS.length)}while(i===lastSpot&&SPOTS.length>1); lastSpot=i;
+  const s=SPOTS[i]; stop();
+  map.flyTo(s.ll,s.z,{duration:1.8});
+  map.once('moveend',()=>{ if(mode==='single')setMode('split'); else{const av=onlyPhotos(); idxA=av[0]; idxB=av[av.length-1]; syncModeUI(); apply()}
+    toast(`${s.n} : ${s.note} Faites glisser le rideau.`) });
+};
+
+// ---- Données superposées ----
+const GEORISQUES='https://www.georisques.gouv.fr/services';
+const OVERLAYS=[
+  {g:'Parcelles',key:'cad',name:'Cadastre',desc:'Limites des parcelles (zoom rapproché)',ign:['CADASTRALPARCELS.PARCELLAIRE_EXPRESS'],style:'PCI vecteur',minZ:13,color:'#EEF1EC'},
+  {g:'Nature',key:'rpg',name:'Cultures agricoles',desc:'Registre parcellaire, dernière campagne',ign:['LANDUSE.AGRICULTURE.LATEST'],color:'#E9C46A'},
+  {g:'Nature',key:'foret',name:'Forêts',desc:'Types de peuplement et essences',ign:['LANDCOVER.FORESTINVENTORY.V2'],color:'#5FA36B'},
+  {g:'Nature',key:'n2k',name:'Natura 2000',desc:'Sites protégés pour les habitats et les oiseaux',ign:['PROTECTEDAREAS.SIC','PROTECTEDAREAS.ZPS'],color:'#7CC4A0'},
+  {g:'Nature',key:'parcs',name:'Parcs naturels',desc:'Parcs nationaux et régionaux',ign:['PROTECTEDAREAS.PN','PROTECTEDAREAS.PNR'],color:'#A3C46A'},
+  {g:'Risques',key:'ppri',name:'Plans de prévention inondation',desc:'Périmètres réglementés par un PPRI',wms:'SUP_INOND',color:'#6FA8DC'},
+  {g:'Risques',key:'crue',name:'Crue centennale',desc:'Surfaces inondées dans les grands territoires à risque',wms:'ALEA_SYNT_01_02MOY_FXX',color:'#3D7FC1'}
+];
+const OV_IDS=new Set(OVERLAYS.flatMap(o=>o.ign||[]));
+const activeOv=new Set(); const ovLayers={}; let ovOpacity=.7;
+
+function buildOverlay(o){
+  const parts=[];
+  if(o.wms){
+    parts.push(L.tileLayer.wms(GEORISQUES,{layers:o.wms,format:'image/png',transparent:true,version:'1.3.0',pane:'over',maxZoom:20,minZoom:o.minZ||0}));
+  }else for(const id of o.ign){
+    const info=ignInfo[id]||{id,fmt:'image/png',style:o.style||'normal',maxZ:19};
+    parts.push(L.tileLayer(tileUrl(info),{pane:'over',maxZoom:20,maxNativeZoom:info.maxZ||19,minZoom:o.minZ||0}));
+  }
+  let ok=0,err=0;
+  parts.forEach(t=>{
+    t.on('loading',()=>{ok=0;err=0}); t.on('tileload',()=>ok++); t.on('tileerror',()=>err++);
+    t.on('load',()=>{ if(err>3&&ok===0&&activeOv.has(o.key)) toast(`« ${o.name} » ne renvoie rien ici. La donnée ne couvre peut-être pas ce secteur.`) });
+  });
+  return L.layerGroup(parts);
+}
+function setOverlays(keys){
+  for(const k of [...activeOv]) if(!keys.includes(k)) toggleOv(k,false);
+  for(const k of keys) if(OVERLAYS.some(o=>o.key===k)) toggleOv(k,true);
+}
+function toggleOv(key,on){
+  const o=OVERLAYS.find(x=>x.key===key); if(!o)return;
+  on=on??!activeOv.has(key);
+  if(on){
+    if(!ovLayers[key])ovLayers[key]=buildOverlay(o);
+    ovLayers[key].addTo(map); ovLayers[key].eachLayer(l=>l.setOpacity(ovOpacity)); activeOv.add(key);
+    if(o.minZ&&map.getZoom()<o.minZ)toast(`Zoomez davantage pour voir « ${o.name} ».`);
+  }else{ if(ovLayers[key])map.removeLayer(ovLayers[key]); activeOv.delete(key) }
+  const b=$('#badge'); b.hidden=!activeOv.size; b.textContent=activeOv.size;
+  renderLayerList(); updateHash();
+}
+function renderLayerList(){
+  const l=$('#layerList'); l.innerHTML=''; let g='';
+  OVERLAYS.forEach(o=>{
+    if(o.g!==g){g=o.g; const h=document.createElement('p'); h.className='group'; h.textContent=g; l.append(h)}
+    const b=document.createElement('button'); b.className='tog'; b.style.setProperty('--swatch',o.color);
+    b.setAttribute('aria-pressed',activeOv.has(o.key));
+    b.innerHTML=`<span class="sw"></span><span><b>${esc(o.name)}</b><small>${esc(o.desc)}</small></span>`;
+    b.onclick=()=>toggleOv(o.key); l.append(b);
+  });
+}
+$('#layersBtn').onclick=()=>{renderLayerList();$('#layers').hidden=false};
+$('#layersClose').onclick=()=>{$('#layers').hidden=true};
+$('#layers').onclick=e=>{if(e.target.id==='layers')$('#layers').hidden=true};
+$('#opa').oninput=e=>{ovOpacity=e.target.value/100; for(const k of activeOv)ovLayers[k].eachLayer(l=>l.setOpacity(ovOpacity))};
+
+// ---- Message ----
+let tt, blocked=false; function toast(m){if(blocked)return;const t=$('#toast'); t.textContent=m; t.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('show'),4200)}
+
+// ---- Démarrage ----
+(async()=>{
+  let list=[];
+  try{list=await loadCaps()}catch(e){console.warn('Catalogue IGN indisponible, couches de secours utilisées',e)}
+  if(!list.length)list=FALLBACK.map(mkEpoch).filter(Boolean);
+  epochs=finalize(list);
+  cur=epochs.findIndex(e=>e.sort===9999); if(cur<0)cur=epochs.length-1;
+  idxB=cur; idxA=0;
+  fillSelects();
+  const fromLink=readHash(location.hash);
+  ready=true; syncModeUI(); renderStrip(); apply();
+  // Test réseau : une tuile de la France entière au zoom 6
+  const probe=new Image();
+  probe.onload=()=>{ if(!fromLink)toast('Cherchez un lieu, localisez-vous, ou touchez le dé pour survoler un lieu qui a changé.') };
+  probe.onerror=()=>{ blocked=true; $('#toast').classList.remove('show'); $('#blocked').hidden=false };
+  probe.src=tileUrl(epochs[cur]).replace('{z}','6').replace('{x}','32').replace('{y}','22');
+})();
+</script>
+</body>
+</html>
